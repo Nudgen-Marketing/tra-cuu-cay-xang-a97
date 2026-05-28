@@ -1,13 +1,17 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { Crosshair, ListFilter, Loader2, MapPinned, Plus, Search } from "lucide-react";
+import { Crosshair, Loader2, MapPinned, Plus, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { MAP_ISSUE_URL } from "@/lib/constants";
 import type { Coordinates } from "@/lib/distance";
 import { filterStations } from "@/lib/station-search";
 import type { PublicStation } from "@/lib/stations";
 import { SubmitStationForm } from "@/components/SubmitStationForm";
+import {
+  GooglePlaceAutocomplete,
+  type GooglePlaceSelection
+} from "@/components/GooglePlaceAutocomplete";
 
 const StationMap = dynamic(() => import("@/components/StationMap").then((mod) => mod.StationMap), {
   ssr: false,
@@ -28,8 +32,9 @@ export function A97App() {
   const [stations, setStations] = useState<PublicStation[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [origin, setOrigin] = useState<Coordinates | null>(null);
+  const [locationQuery, setLocationQuery] = useState("");
+  const [textQuery, setTextQuery] = useState("");
   const [mode, setMode] = useState<"map" | "submit">("map");
-  const [query, setQuery] = useState("");
   const [radiusKm, setRadiusKm] = useState(50);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,10 +70,20 @@ export function A97App() {
   }, []);
 
   const orderedStations = useMemo(() => {
-    return filterStations(stations, { query, origin, radiusKm });
-  }, [origin, query, radiusKm, stations]);
+    return filterStations(stations, { query: textQuery, origin, radiusKm });
+  }, [origin, textQuery, radiusKm, stations]);
 
   const selectedStation = orderedStations.find((station) => station.id === selectedId) ?? null;
+
+  function applyPlace(place: GooglePlaceSelection) {
+    setOrigin({
+      latitude: place.latitude,
+      longitude: place.longitude
+    });
+    setLocationQuery(place.name || place.address);
+    setSelectedId(null);
+    setError(null);
+  }
 
   function locateUser() {
     if (!navigator.geolocation) {
@@ -82,6 +97,7 @@ export function A97App() {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude
         });
+        setLocationQuery("Vị trí của tôi");
         setError(null);
       },
       () => {
@@ -129,29 +145,42 @@ export function A97App() {
         </div>
 
         <div className="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-bold text-[var(--primary)]">
-                Bản đồ Việt Nam, bao gồm Hoàng Sa và Trường Sa
-              </p>
-              <h2 className="text-xl font-black">{stations.length} cây xăng A97</h2>
-            </div>
-            <button className="a97-button secondary" type="button" onClick={locateUser}>
+          <h2 className="text-base font-black">Tìm địa điểm gần bạn</h2>
+          <div className="mt-3 space-y-3">
+            <GooglePlaceAutocomplete
+              label="Nhập địa điểm"
+              placeholder="Ví dụ: Nguyễn Trãi, Bình Thạnh"
+              query={locationQuery}
+              onQueryChange={setLocationQuery}
+              onSelect={applyPlace}
+            />
+            <button className="a97-button secondary w-full" type="button" onClick={locateUser}>
               <Crosshair size={18} aria-hidden />
-              Gần tôi
+              Dùng vị trí hiện tại
             </button>
+            <label className="a97-label">
+              Bán kính tìm gần
+              <select
+                className="a97-input"
+                value={radiusKm}
+                onChange={(event) => setRadiusKm(Number(event.target.value))}
+                disabled={!origin}
+              >
+                <option value={10}>10 km</option>
+                <option value={25}>25 km</option>
+                <option value={50}>50 km</option>
+                <option value={100}>100 km</option>
+                <option value={250}>250 km</option>
+              </select>
+            </label>
+            <div className="rounded-lg border border-[var(--line)] bg-white p-3 text-sm text-[var(--muted)]">
+              {origin
+                ? `Đã đặt điểm tìm kiếm${locationQuery ? `: ${locationQuery}` : ""}. Danh sách đã lọc theo khoảng cách.`
+                : "Nhập địa điểm hoặc bật định vị để lọc theo khoảng cách."}
+            </div>
           </div>
-          {origin ? (
-            <p className="mt-3 text-sm text-[var(--muted)]">
-              Danh sách đang lọc trong bán kính {radiusKm} km từ vị trí của bạn.
-            </p>
-          ) : (
-            <p className="mt-3 text-sm text-[var(--muted)]">
-              Bật định vị để xem cây xăng gần nhất. Ứng dụng không gửi vị trí của bạn lên máy chủ.
-            </p>
-          )}
           <a
-            className="mt-3 inline-block text-sm font-bold text-[var(--primary)]"
+            className="mt-4 inline-block text-sm font-bold text-[var(--primary)]"
             href={MAP_ISSUE_URL}
             target="_blank"
             rel="noreferrer"
@@ -169,26 +198,23 @@ export function A97App() {
             <input
               className="a97-input"
               placeholder="Ví dụ: Hà Nội, Petrolimex, QL1A"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              value={textQuery}
+              onChange={(event) => setTextQuery(event.target.value)}
             />
           </label>
-          <label className="a97-label mt-4">
-            Bán kính khi bật định vị
-            <select
-              className="a97-input"
-              value={radiusKm}
-              onChange={(event) => setRadiusKm(Number(event.target.value))}
-              disabled={!origin}
-            >
-              <option value={10}>10 km</option>
-              <option value={25}>25 km</option>
-              <option value={50}>50 km</option>
-              <option value={100}>100 km</option>
-              <option value={250}>250 km</option>
-            </select>
-          </label>
         </div>
+
+        {origin ? (
+          <div className="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-3 text-sm text-[var(--muted)]">
+            <p>
+              Danh sách đang lọc trong bán kính {radiusKm} km từ vị trí tìm kiếm.
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-3 text-sm text-[var(--muted)]">
+            Chưa có điểm tìm kiếm. Bật định vị hoặc nhập địa điểm để xem cây xăng gần nhất.
+          </div>
+        )}
 
         {error ? (
           <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm font-bold text-red-700">
@@ -197,9 +223,11 @@ export function A97App() {
         ) : null}
 
         <div className="rounded-lg border border-[var(--line)] bg-[var(--panel)]">
-          <div className="flex items-center gap-2 border-b border-[var(--line)] px-4 py-3">
-            <ListFilter size={18} aria-hidden />
-            <h2 className="font-black">Danh sách cây xăng</h2>
+          <div className="border-b border-[var(--line)] px-4 py-3">
+            <div className="flex items-center justify-between">
+              <h2 className="font-black">Danh sách cây xăng</h2>
+              <p className="text-sm text-[var(--muted)]">{orderedStations.length} kết quả</p>
+            </div>
           </div>
           <div className="max-h-[520px] overflow-auto">
             {isLoading ? (

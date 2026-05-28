@@ -2,7 +2,9 @@
 
 import { Check, LogOut, PowerOff, RefreshCcw, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+
+const DIRECTIONS_BASE_URL = "https://www.google.com/maps/dir/?api=1&travelmode=driving";
 
 type AdminSubmission = {
   id: string;
@@ -64,6 +66,8 @@ export function AdminDashboard({ submissions, stations }: AdminDashboardProps) {
     router.push("/admin/login");
   }
 
+  const pendingCount = useMemo(() => submissions.length, [submissions.length]);
+
   return (
     <main className="min-h-screen bg-[var(--background)]">
       <header className="border-b border-[var(--line)] bg-[var(--panel)]">
@@ -88,7 +92,7 @@ export function AdminDashboard({ submissions, stations }: AdminDashboardProps) {
       <section className="mx-auto grid max-w-7xl gap-5 px-4 py-5 lg:grid-cols-[minmax(0,1fr)_420px]">
         <div className="rounded-lg border border-[var(--line)] bg-[var(--panel)]">
           <div className="border-b border-[var(--line)] px-4 py-3">
-            <h2 className="text-xl font-black">Đề xuất chờ duyệt ({submissions.length})</h2>
+            <h2 className="text-xl font-black">Đề xuất chờ duyệt ({pendingCount})</h2>
           </div>
           <div className="grid gap-4 p-4">
             {error ? (
@@ -137,7 +141,7 @@ export function AdminDashboard({ submissions, stations }: AdminDashboardProps) {
                     <button
                       className="a97-button secondary"
                       type="button"
-                      onClick={() => postJson(`/api/admin/stations/${station.id}/deactivate`)}
+                      onClick={() => postJson(`/api/admin/stations/${station.id}/deactivate`) }
                     >
                       <PowerOff size={16} aria-hidden />
                     </button>
@@ -176,6 +180,10 @@ function ModerationItem({
     moderationNotes: ""
   });
 
+  const isBusy = busyId !== null;
+  const coordinates = `${submission.latitude.toFixed(6)}, ${submission.longitude.toFixed(6)}`;
+  const directionsUrl = `${DIRECTIONS_BASE_URL}&destination=${submission.latitude},${submission.longitude}`;
+
   function update(key: keyof typeof draft, value: string | number) {
     setDraft((current) => ({ ...current, [key]: value }));
   }
@@ -187,9 +195,12 @@ function ModerationItem({
           Gửi lúc {new Intl.DateTimeFormat("vi-VN").format(new Date(submission.createdAt))}
         </p>
         <h3 className="text-lg font-black">{submission.name}</h3>
-        {submission.submitterContact ? (
-          <p className="mt-1 text-sm text-[var(--muted)]">Liên hệ: {submission.submitterContact}</p>
+        {(submission.submitterName || submission.submitterContact) ? (
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            Người gửi: {submission.submitterName ?? "Không rõ"} / {submission.submitterContact ?? "Không để lại liên hệ"}
+          </p>
         ) : null}
+        <p className="mt-1 text-sm text-[var(--muted)]">Tọa độ: {coordinates}</p>
       </div>
       <div className="grid gap-3 md:grid-cols-2">
         <label className="a97-label md:col-span-2">
@@ -244,6 +255,33 @@ function ModerationItem({
             onChange={(event) => update("longitude", Number(event.target.value))}
           />
         </label>
+        {submission.photoUrl || submission.sourceUrl ? (
+          <div className="a97-label md:col-span-2">
+            <span className="block text-sm font-bold text-[var(--foreground)]">Tài liệu</span>
+            <div className="mt-1 flex flex-wrap gap-2 text-sm">
+              {submission.photoUrl ? (
+                <a
+                  className="font-bold text-[var(--primary)] underline"
+                  href={submission.photoUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Ảnh minh chứng
+                </a>
+              ) : null}
+              {submission.sourceUrl ? (
+                <a
+                  className="font-bold text-[var(--primary)] underline"
+                  href={submission.sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Nguồn
+                </a>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
         <label className="a97-label md:col-span-2">
           Ghi chú kiểm duyệt
           <textarea
@@ -253,26 +291,38 @@ function ModerationItem({
           />
         </label>
       </div>
+
       <div className="mt-4 flex flex-wrap gap-2">
+        <a
+          className="a97-button secondary"
+          href={directionsUrl}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Kiểm tra trên bản đồ
+        </a>
         <button
           className="a97-button"
           type="button"
-          disabled={Boolean(busyId)}
+          disabled={isBusy}
           onClick={() => onApprove(draft)}
         >
           <Check size={18} aria-hidden />
-          Duyệt
+          {isBusy ? "Đang xử lý..." : "Duyệt"}
         </button>
         <button
           className="a97-button secondary"
           type="button"
-          disabled={Boolean(busyId)}
+          disabled={isBusy}
           onClick={() => onReject(draft.moderationNotes)}
         >
           <X size={18} aria-hidden />
-          Từ chối
+          {isBusy ? "Đang xử lý..." : "Từ chối"}
         </button>
       </div>
+      <p className="mt-3 text-xs text-[var(--muted)]">
+        Duyệt sẽ tạo mới cây xăng và xóa trạng thái ticket ngay sau khi cache bản đồ được làm mới.
+      </p>
     </article>
   );
 }

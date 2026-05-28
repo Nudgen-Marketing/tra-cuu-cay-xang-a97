@@ -1,4 +1,4 @@
-import { MapPin, ShieldCheck } from "lucide-react";
+import { MapPin } from "lucide-react";
 import { A97App } from "@/components/A97App";
 
 export default function Home() {
@@ -19,10 +19,6 @@ export default function Home() {
               trước khi hiển thị công khai.
             </p>
           </div>
-          <a className="a97-button secondary w-fit" href="/admin/login">
-            <ShieldCheck size={18} aria-hidden />
-            Quản trị
-          </a>
         </div>
       </header>
       <A97App />

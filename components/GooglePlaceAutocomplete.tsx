@@ -21,6 +21,10 @@ export type GooglePlaceSelection = {
 
 type GooglePlaceAutocompleteProps = {
   onSelect: (place: GooglePlaceSelection) => void;
+  label?: string;
+  placeholder?: string;
+  query?: string;
+  onQueryChange?: (value: string) => void;
 };
 
 type PlacePrediction = google.maps.places.PlacePrediction;
@@ -63,15 +67,38 @@ function toSelection(place: google.maps.places.Place): GooglePlaceSelection | nu
   };
 }
 
-export function GooglePlaceAutocomplete({ onSelect }: GooglePlaceAutocompleteProps) {
-  const [query, setQuery] = useState("");
+export function GooglePlaceAutocomplete({
+  onSelect,
+  label = "Tìm địa chỉ bằng Google Maps",
+  placeholder = "Nhập ít nhất 3 ký tự, ví dụ: cây xăng A97 Đà Nẵng",
+  query,
+  onQueryChange
+}: GooglePlaceAutocompleteProps) {
+  const [queryText, setQueryText] = useState(query ?? "");
   const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
   const [placesLibrary, setPlacesLibrary] = useState<PlacesLibrary | null>(null);
   const [isLoadingLibrary, setIsLoadingLibrary] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const sessionTokenRef = useRef<google.maps.places.AutocompleteSessionToken | null>(null);
-  const selectedQueryRef = useRef("");
+  const [selectedQuery, setSelectedQuery] = useState("");
+
+  const [prevQuery, setPrevQuery] = useState(query);
+  if (query !== prevQuery) {
+    setPrevQuery(query);
+    if (query !== undefined) {
+      setQueryText(query);
+      setSelectedQuery(query);
+      if (query.trim().length < 3) {
+        setPredictions([]);
+      }
+    }
+  }
+
+  function syncQuery(nextQuery: string) {
+    setQueryText(nextQuery);
+    onQueryChange?.(nextQuery);
+  }
 
   async function ensurePlacesLibrary() {
     if (placesLibrary || isLoadingLibrary || !hasGoogleMapsApiKey()) {
@@ -91,12 +118,12 @@ export function GooglePlaceAutocomplete({ onSelect }: GooglePlaceAutocompletePro
   }
 
   useEffect(() => {
-    if (!placesLibrary || query.trim().length < 3) {
+    if (!placesLibrary || queryText.trim().length < 3) {
       return;
     }
 
-    const searchText = query.trim();
-    if (searchText === selectedQueryRef.current) {
+    const searchText = queryText.trim();
+    if (searchText === selectedQuery) {
       return;
     }
 
@@ -143,7 +170,7 @@ export function GooglePlaceAutocomplete({ onSelect }: GooglePlaceAutocompletePro
       cancelled = true;
       window.clearTimeout(timeoutId);
     };
-  }, [placesLibrary, query]);
+  }, [placesLibrary, queryText, selectedQuery]);
 
   async function selectPrediction(prediction: PlacePrediction) {
     setError(null);
@@ -160,8 +187,8 @@ export function GooglePlaceAutocomplete({ onSelect }: GooglePlaceAutocompletePro
 
       onSelect(selection);
       const nextQuery = selection.address || selection.name;
-      selectedQueryRef.current = nextQuery;
-      setQuery(nextQuery);
+      setSelectedQuery(nextQuery);
+      syncQuery(nextQuery);
       setPredictions([]);
       sessionTokenRef.current = null;
     } catch {
@@ -172,7 +199,7 @@ export function GooglePlaceAutocomplete({ onSelect }: GooglePlaceAutocompletePro
   if (!hasGoogleMapsApiKey()) {
     return (
       <p className="rounded-lg border border-[var(--line)] bg-white p-3 text-sm text-[var(--muted)]">
-        Tìm địa chỉ bằng Google Maps sẽ hoạt động sau khi cấu hình API key.
+        {label} sẽ hoạt động sau khi cấu hình API key.
       </p>
     );
   }
@@ -182,26 +209,31 @@ export function GooglePlaceAutocomplete({ onSelect }: GooglePlaceAutocompletePro
       <label className="a97-label">
         <span className="flex items-center gap-2">
           <Search size={17} aria-hidden />
-          Tìm địa chỉ bằng Google Maps
+          {label}
         </span>
         <input
           className="a97-input"
-          placeholder="Nhập ít nhất 3 ký tự, ví dụ: cây xăng A97 Đà Nẵng"
-          value={query}
+          placeholder={placeholder}
+          value={queryText}
           onBlur={() => {
             window.setTimeout(() => setPredictions([]), 180);
           }}
           onChange={(event) => {
             const nextQuery = event.target.value;
-            if (nextQuery.trim() !== selectedQueryRef.current) {
-              selectedQueryRef.current = "";
+            syncQuery(nextQuery);
+            if (nextQuery.trim() !== selectedQuery) {
+              setSelectedQuery("");
             }
-            setQuery(nextQuery);
             if (nextQuery.trim().length < 3) {
               setPredictions([]);
             }
           }}
           onFocus={ensurePlacesLibrary}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              setPredictions([]);
+            }
+          }}
         />
       </label>
       {isLoadingLibrary || isSearching ? (
